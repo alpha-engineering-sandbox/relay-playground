@@ -43,6 +43,11 @@ jobs:
                           const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number })
                           const comments = JSON.parse(COMMENTS)
                           await github.rest.pulls.createReview({ ...repo, pull_number, commit_id: pr.head.sha, event: events[ACTION], body: BODY || undefined, comments })
+                      } else if (ACTION === 'line_comment') {
+                          const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number })
+                          for (const comment of JSON.parse(COMMENTS)) {
+                              await github.rest.pulls.createReviewComment({ ...repo, pull_number, commit_id: pr.head.sha, ...comment })
+                          }
                       } else if (ACTION === 'comment') {
                           await github.rest.issues.createComment({ ...repo, issue_number: pull_number, body: BODY })
                       } else if (ACTION === 'reply') {
