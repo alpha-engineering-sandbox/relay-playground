@@ -1,0 +1,55 @@
+name: bot
+on:
+    workflow_dispatch:
+        inputs:
+            action:
+                description: review | approve | request_changes | comment | reply | resolve | unresolve
+                required: true
+            pr:
+                required: true
+            body:
+                default: ''
+            comments:
+                description: JSON array of {path, line?, side?, body, subject_type?}
+                default: '[]'
+            comment_id:
+                description: numeric id of the comment to reply to
+                default: ''
+            thread_id:
+                description: GraphQL id of the review thread
+                default: ''
+permissions:
+    pull-requests: write
+    contents: read
+jobs:
+    act:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/github-script@v7
+              env:
+                  ACTION: ${{ inputs.action }}
+                  PR: ${{ inputs.pr }}
+                  BODY: ${{ inputs.body }}
+                  COMMENTS: ${{ inputs.comments }}
+                  COMMENT_ID: ${{ inputs.comment_id }}
+                  THREAD_ID: ${{ inputs.thread_id }}
+              with:
+                  script: |
+                      const { ACTION, BODY, COMMENTS, COMMENT_ID, THREAD_ID } = process.env
+                      const pull_number = Number(process.env.PR)
+                      const repo = context.repo
+                      const events = { review: 'COMMENT', approve: 'APPROVE', request_changes: 'REQUEST_CHANGES' }
+                      if (ACTION in events) {
+                          const { data: pr } = await github.rest.pulls.get({ ...repo, pull_number })
+                          const comments = JSON.parse(COMMENTS)
+                          await github.rest.pulls.createReview({ ...repo, pull_number, commit_id: pr.head.sha, event: events[ACTION], body: BODY || undefined, comments })
+                      } else if (ACTION === 'comment') {
+                          await github.rest.issues.createComment({ ...repo, issue_number: pull_number, body: BODY })
+                      } else if (ACTION === 'reply') {
+                          await github.rest.pulls.createReplyForReviewComment({ ...repo, pull_number, comment_id: Number(COMMENT_ID), body: BODY })
+                      } else if (ACTION === 'resolve' || ACTION === 'unresolve') {
+                          const mutation = ACTION === 'resolve' ? 'resolveReviewThread' : 'unresolveReviewThread'
+                          await github.graphql(`mutation($id: ID!) { ${mutation}(input: { threadId: $id }) { thread { id isResolved } } }`, { id: THREAD_ID })
+                      } else {
+                          core.setFailed(`unknown action ${ACTION}`)
+                      }
