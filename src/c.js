@@ -1,2 +1,2 @@
-const c = 1
-module.exports = c
+const c = 2
+export default c
